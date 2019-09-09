@@ -1,0 +1,35 @@
+{
+  "name": "dpo-handler",
+  "version": "0.0.1",
+  "description": "Processes requests to be sent to a DPO by writing and reading to/from Kafka",
+  "main": "server.js",
+  "scripts": {
+    "test": "./node_modules/.bin/eslint ./",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git"
+  },
+  "keywords": [
+    "nodejs"
+  ],
+  "author": "Arnaud S'Jongers",
+  "license": "ISC",
+  "eslintConfig": {
+    "extends": "standard"
+  },
+  "devDependencies": {
+    "eslint": "~4.18.1",
+    "eslint-config-standard": "~11.0.0",
+    "eslint-plugin-promise": "~3.6.0",
+    "eslint-plugin-standard": "~3.0.1",
+    "eslint-plugin-import": "~2.9.0",
+    "eslint-plugin-node": "~6.0.1"
+  },
+  "dependencies": {
+    "body-parser": "latest",
+    "express": "^4.16.3",
+    "node-rdkafka": "2.5.1",
+    "uuid": "^3.3.3"
+  }
+}
