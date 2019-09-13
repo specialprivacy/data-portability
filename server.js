@@ -8,6 +8,7 @@ const uuidv4 = require('uuid/v4');
 
 const requests = {};
 const responses = {};
+const dataSubjects = {};
 
 app.disable("x-powered-by");
 
@@ -46,7 +47,7 @@ app.get("/data-portability-requests", (req, res) => {
 
 app.post("/data-portability-requests", (req, res) => {
     const uuid = uuidv4();
-    requests[uuid] = new DataPortabilityRequest(uuid, new Date(), req.body.data.relationships["data-subject"].id, null);
+    requests[uuid] = new DataPortabilityRequest(uuid, new Date(), req.body.data.relationships["data-subject"].data.id, null);
 
     let payload = {"data": requests[uuid].toJsonApi()};
 
@@ -107,7 +108,7 @@ app.get("/data-portability-responses", (req, res) => {
 app.post("/data-portability-responses", (req, res) => {
     const uuid = uuidv4();
 
-    const request = requests[req.body.data.relationships["data-portability-request"].id];
+    const request = requests[req.body.data.relationships["data-portability-request"].data.id];
     if(!request) {
         return res.status(404).end();
     }
@@ -151,6 +152,26 @@ app.delete("/data-portability-responses/:id", (req, res) => {
     res.status(204).end();
 });
 
+app.get("/data-subjects", (req, res) => {
+    let payload = {"data": Object.values(dataSubjects).map((dataSubject) => { return dataSubject.toJsonApi() })};
+    res.status(200).json(payload);
+});
+
+app.post("/data-subjects", (req, res) => {
+    const uuid = req.body.data.id || uuidv4();
+    dataSubjects[uuid] = new DataSubject(uuid, req.body.data.attributes["name"]);
+    let payload = {"data": dataSubjects[uuid].toJsonApi()};
+    res.status(201).json(payload);
+});
+
+app.get("/data-subjects/:id", (req, res) => {
+    let uuid = req.params.id;
+    let dataSubject = dataSubjects[uuid];
+    if(!dataSubject) return res.status(404).end();
+    let payload = {"data": dataSubject.toJsonApi()};
+    res.status(200).json(payload);
+});
+
 class DataPortabilityRequest {
     constructor(id, timestamp, dataSubjectId, dataPortabilityResponseId) {
         this.id = id;
@@ -170,14 +191,18 @@ class DataPortabilityRequest {
         };
         if(this.dataSubjectId) {
             payload.relationships["data-subject"] = {
-                "id": this.dataSubjectId,
-                "type": "data-subjects"
+                "data": {
+                    "id": this.dataSubjectId,
+                    "type": "data-subjects"
+                }
             }
         }
         if(this.dataPortabilityResponseId) {
             payload.relationships["data-portability-response"] = {
-                "id": this.dataPortabilityResponseId,
-                "type": "data-portability-responses"
+                "data": {
+                    "id": this.dataPortabilityResponseId,
+                    "type": "data-portability-responses"
+                }
             }
         }
         return payload;
@@ -193,7 +218,7 @@ class DataPortabilityResponse {
     }
 
     toJsonApi() {
-        let payload = {
+        return {
             "id": this.id,
             "type": "data-portability-responses",
             "attributes": {
@@ -202,15 +227,33 @@ class DataPortabilityResponse {
             },
             "relationships": {
                 "data-portability-request": {
-                    "id": this.dataPortabilityRequestId,
-                    "type": "data-portability-responses"
+                    "data": {
+                        "id": this.dataPortabilityRequestId,
+                        "type": "data-portability-responses"
+                    }
                 }
             }
         };
-        return payload;
     }
 }
 
+class DataSubject {
+    constructor(id, name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    toJsonApi() {
+        return {
+            "id": this.id,
+            "type": "data-subjects",
+            "attributes": {
+                "name": this.name
+            },
+            "relationships": {}
+        };
+    }
+}
 
 const Kafka = require("node-rdkafka");
 const producer = new Kafka.Producer({
