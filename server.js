@@ -35,11 +35,17 @@ app.use(function (req, res, next) {
 });
 
 app.get("/data-portability-requests", (req, res) => {
-    let payload = {"data": Object.values(requests).map((request) => { return request.toJsonApi() })};
+    let payload = {
+        "data": Object.values(requests).map((request) => { return request.toJsonApi() })
+    };
     if(req.query.include && req.query.include.includes("data-portability-response")) {
-        payload["included"] = Object.values(requests)
+        payload["included"] = [].concat.apply(
+            Object.values(requests)
             .filter((request) => {return request.dataPortabilityResponseId != null})
-            .map((request) => { return responses[request.dataPortabilityResponseId].toJsonApi()});
+            .map((request) => {
+                const response = responses[request.dataPortabilityResponseId];
+                return [response.toJsonApi(), ...response.getIncluded()];
+            }));
     }
 
     res.status(200).json(payload);
@@ -76,7 +82,8 @@ app.get("/data-portability-requests/:id", (req, res) => {
     let payload = {"data": request.toJsonApi()};
     if(req.query.include && req.query.include.includes("data-portability-response")) {
         if(request.dataPortabilityResponseId) {
-            payload["included"] = [responses[request.dataPortabilityResponseId].toJsonApi()];
+            const response = responses[request.dataPortabilityResponseId].toJsonApi();
+            payload["included"] = [response.toJsonApi(), ...response.getIncluded()];
         }
     }
 
@@ -95,11 +102,16 @@ app.delete("/data-portability-requests/:id", (req, res) => {
 
 
 app.get("/data-portability-responses", (req, res) => {
-    let payload = {"data": Object.values(responses).map((response) => { return response.toJsonApi() })};
+    let payload = {
+        "data": Object.values(responses).map((response) => { return response.toJsonApi() }),
+        "included": [].concat.apply([],
+            Object.values(responses).map((response) => { return response.getIncluded() })
+        )
+    };
     if(req.query.include && req.query.include.includes("data-portability-request")) {
-        payload["included"] = Object.values(responses)
+        payload["included"] = payload["included"].concat(Object.values(responses)
             .filter((response) => {return response.dataPortabilityRequestId != null})
-            .map((response) => { return requests[response.dataPortabilityRequestId].toJsonApi()});
+            .map((response) => { return requests[response.dataPortabilityRequestId].toJsonApi()}));
     }
 
     res.status(200).json(payload);
@@ -125,10 +137,10 @@ app.get("/data-portability-responses/:id", (req, res) => {
     let response = responses[uuid];
     if(!response) return res.status(404).end();
 
-    let payload = {"data": response.toJsonApi()};
+    let payload = {"data": response.toJsonApi(), "included": response.getIncluded()};
     if(req.query.include && req.query.include.includes("data-portability-request")) {
         if(response.dataPortabilityRequestId) {
-            payload["included"] = [requests[response.dataPortabilityRequestId].toJsonApi()];
+            payload["included"] = payload["included"].concat([requests[response.dataPortabilityRequestId].toJsonApi()]);
         }
     }
 
@@ -213,27 +225,33 @@ class DataPortabilityResponse {
     constructor(id, timestamp, payload, dataPortabilityRequestId) {
         this.id = id;
         this.timestamp = timestamp;
-        this.payload = payload;
         this.dataPortabilityRequestId = dataPortabilityRequestId;
+        this.convertedPayload = this.convertPayload(payload);
     }
 
     toJsonApi() {
-        return {
-            "id": this.id,
-            "type": "data-portability-responses",
-            "attributes": {
-                "timestamp": this.timestamp,
-                "payload": this.payload
-            },
-            "relationships": {
-                "data-portability-request": {
-                    "data": {
-                        "id": this.dataPortabilityRequestId,
-                        "type": "data-portability-responses"
-                    }
-                }
+        return this.convertedPayload.data;
+    }
+
+    getIncluded() {
+        return this.convertedPayload.included || [];
+    }
+
+    convertPayload(payload) {
+        if(!payload["data"]) payload["data"] = {"attributes": {}, "relationships": {}, "links": {}};
+        payload["data"]["id"] = this.id;
+        payload["data"]["type"] = "data-portability-responses";
+        payload["data"]["attributes"]["timestamp"] = this.timestamp;
+        payload["data"]["links"]["self"] = "/data-portability-responses/" + this.id;
+        payload["data"]["relationships"]["data-portability-request"] = {
+            "data": {
+                "id": this.dataPortabilityRequestId,
+                "type": "data-portability-requests"
             }
         };
+        delete payload["data"]["attributes"]["is-initialized"];
+        delete payload["data"]["attributes"]["title"];
+        return payload;
     }
 }
 
